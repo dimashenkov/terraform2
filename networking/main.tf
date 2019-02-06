@@ -24,7 +24,7 @@ resource "aws_internet_gateway" "tf_internet_gateway" {
   }
 }
 
-# rout tables
+# route tables
 
 resource "aws_route_table" "tf_public_rt" {
   vpc_id = "${aws_vpc.tf_vpc.id}"
@@ -37,11 +37,61 @@ resource "aws_route_table" "tf_public_rt" {
     }
   }
 
-resource "aws_default_route_table" "tf_privat_rt" {
-  default_route_table_id = "${aws_vpc.tf_vpc.default_route_table.id}"
-  tags = {
-     Name = "tf_privat"
-    }
+resource "aws_default_route_table" "tf_private_rt" {
+  default_route_table_id = "${aws_vpc.tf_vpc.default_route_table_id}"
+
+  tags {
+    Name = "tf_private"
   }
+}
+
+# two public subnets   
+resource "aws_subnet" "tf_public_subnet" {
+  count = 2
+  vpc_id     = "${aws_vpc.tf_vpc.id}"
+  cidr_block = "${var.public_cidrs[count.index]}"
+  map_public_ip_on_launch = true
+  availability_zone = "${data.aws_availability_zones.available.names[count.index]}"
+  tags = {
+    Name = "tf_public_${count.index+1}"
+  }
+}
+
+# association/zaka4ane rout tables to subnets
+resource "aws_route_table_association" "tf_public_assoc" {
+  count = "${aws_subnet.tf_public_subnet.count}"
+  subnet_id      = "${aws_subnet.tf_public_subnet.*.id[count.index]}"
+  route_table_id = "${aws_route_table.tf_public_rt.id}"
+}
   
-  
+# Security
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for accsess to the public instancies"
+  vpc_id      = "${aws_vpc.tf_vpc.id}"
+
+  #SSH
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+
+  #HTTP
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+
+  #ALL navun da izliza
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    cidr_blocks     = ["0.0.0.0/0"]
+  }
+}
